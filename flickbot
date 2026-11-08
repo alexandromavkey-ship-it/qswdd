@@ -1,0 +1,56 @@
+local FAST_FLICK_TO = 0.08   -- 80 milliseconds to target
+local FAST_FLICK_BACK = 0.03 -- 30 milliseconds back to original view
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == ACTIVATION_KEY and not isFlicking then
+        local targetPart = getClosestTarget()
+        local myCharacter = LocalPlayer.Character
+        local myHRP = myCharacter and myCharacter:FindFirstChild("HumanoidRootPart")
+        
+        if targetPart and myHRP then
+            isFlicking = true
+            
+            -- 1. Save original states before the movement chain starts
+            local originalCameraCFrame = Camera.CFrame
+            local originalCharacterCFrame = myHRP.CFrame
+            
+            -- 2. Calculate target orientations
+            local targetCameraCFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+            -- Flattened target for character model (prevents tilting up/down into the floor/sky)
+            local targetCharacterCFrame = CFrame.new(myHRP.Position, Vector3.new(targetPart.Position.X, myHRP.Position.Y, targetPart.Position.Z))
+            
+            -- Custom tight timelines for rapid execution
+            local tweenInfoTo = TweenInfo.new(FAST_FLICK_TO, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+            local tweenInfoBack = TweenInfo.new(FAST_FLICK_BACK, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            
+            -- MOTION 1: Ultra-fast overshoot and lock onto target (Camera + Body)
+            local cameraTweenTo = TweenService:Create(Camera, tweenInfoTo, {CFrame = targetCameraCFrame})
+            local characterTweenTo = TweenService:Create(myHRP, tweenInfoTo, {CFrame = targetCharacterCFrame})
+            
+            cameraTweenTo:Play()
+            characterTweenTo:Play()
+            
+            cameraTweenTo.Completed:Connect(function()
+                -- TRIGGERBOT: Fire instantly at the apex of the flick
+                if mouse1press and mouse1release then
+                    mouse1press()
+                    mouse1release()
+                end
+                
+                -- MOTION 2: Instant 30ms whip back to original view (Camera + Body)
+                local cameraTweenBack = TweenService:Create(Camera, tweenInfoBack, {CFrame = originalCameraCFrame})
+                -- Restores the exact orientation your body was facing before the keypress
+                local characterTweenBack = TweenService:Create(myHRP, tweenInfoBack, {CFrame = originalCharacterCFrame})
+                
+                cameraTweenBack:Play()
+                characterTweenBack:Play()
+                
+                cameraTweenBack.Completed:Connect(function()
+                    isFlicking = false
+                end)
+            end)
+        end
+    end
+end)
